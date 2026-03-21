@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>現場詳細管理アプリ (Firebase版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <style>
+        .border-day { border: 4px solid #f97316 !important; }
+        .border-night { border: 4px solid #2563eb !important; }
+        .bg-day-light { background-color: #fff7ed; }
+        .bg-night-light { background-color: #eff6ff; }
+        #loading { display: none; position: fixed; inset: 0; background: rgba(255,255,255,0.8); z-index: 100; align-items: center; justify-content: center; flex-direction: column; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen pb-10">
+
+    <div id="loading">
+        <div class="animate-spin h-8 w-8 border-4 border-blue-500 rounded-full border-t-transparent mb-2"></div>
+        <p class="text-xs font-bold text-blue-600">同期中...</p>
+    </div>
+
+    <header class="bg-slate-800 text-white p-4 shadow-lg sticky top-0 z-50 text-center">
+        <h1 class="font-bold">現場詳細管理アプリ</h1>
+    </header>
+
+    <div class="p-4 max-w-xl mx-auto">
+        <div onclick="toggleModal(true)" class="bg-white border-2 border-dashed border-slate-400 rounded-xl p-6 text-center text-slate-600 font-bold cursor-pointer hover:bg-slate-50 mb-6">
+            タップして新規現場を入力
+        </div>
+        <div id="display-root" class="space-y-4"></div>
+    </div>
+
+    <div id="modal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 overflow-y-auto max-h-[90vh]">
+            <h2 class="text-xl font-bold mb-4 border-b pb-2">現場入力</h2>
+            <div class="space-y-3" id="site-form">
+                <input id="f-client" type="text" placeholder="元請け会社 (必須)" class="w-full border p-3 rounded-lg bg-gray-50">
+                <input id="f-office" type="text" placeholder="作業所名" class="w-full border p-3 rounded-lg bg-gray-50">
+                <input id="f-site" type="text" placeholder="現場名 (必須)" class="w-full border p-3 rounded-lg bg-gray-50">
+                <input id="f-subject" type="text" placeholder="件名" class="w-full border p-3 rounded-lg bg-gray-50">
+                <input id="f-loc" type="text" placeholder="現場の場所 (URLなど)" class="w-full border p-3 rounded-lg bg-gray-50">
+                <input id="f-code" type="text" placeholder="伝票コード" class="w-full border p-3 rounded-lg bg-gray-50">
+                <div class="grid grid-cols-2 gap-2">
+                    <select id="f-job" class="border p-3 rounded-lg"><option value="列車見張り">列車見張り</option><option value="交通誘導">交通誘導</option></select>
+                    <select id="f-shift" class="border p-3 rounded-lg"><option value="日勤">日勤</option><option value="夜勤">夜勤</option></select>
+                </div>
+                <textarea id="f-desc" placeholder="作業内容" class="w-full border p-3 rounded-lg h-24 bg-gray-50 text-sm"></textarea>
+                <div class="grid grid-cols-2 gap-2">
+                    <input id="f-time" type="text" placeholder="点呼時間" class="border p-3 rounded-lg">
+                    <input id="f-meet-loc" type="text" placeholder="点呼場所" class="border p-3 rounded-lg">
+                </div>
+                <div class="flex gap-2 pt-4">
+                    <button onclick="saveToFirebase()" class="flex-1 bg-blue-600 text-white py-4 rounded-xl font-bold">登録</button>
+                    <button onclick="toggleModal(false)" class="flex-1 bg-gray-200 text-gray-600 py-4 rounded-xl font-bold">閉じる</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // あなたのFirebase設定
+        const firebaseConfig = {
+          apiKey: "AIzaSyDrDVqeE3yPhEd38Awv9sakOWaKGtGSmlM",
+          authDomain: "genba-b1b17.firebaseapp.com",
+          projectId: "genba-b1b17",
+          storageBucket: "genba-b1b17.firebasestorage.app",
+          messagingSenderId: "323025395142",
+          appId: "1:323025395142:web:71740b7d15a0c5987166c7"
+        };
+
+        // Firebase初期化
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // データのリアルタイム監視と表示
+        db.collection("sites").orderBy("createdAt", "desc").onSnapshot((snapshot) => {
+            const root = document.getElementById('display-root');
+            root.innerHTML = '';
+            snapshot.forEach((doc) => {
+                const s = doc.data();
+                const card = document.createElement('div');
+                const sClass = s.shift === '日勤' ? 'border-day bg-day-light' : 'border-night bg-night-light';
+                card.className = `p-4 border-2 rounded-xl shadow-sm bg-white ${sClass}`;
+                card.innerHTML = `
+                    <div class="font-bold text-slate-700 mb-1">${s.client} / ${s.office}</div>
+                    <div class="text-xl font-black mb-2">${s.siteName}</div>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div class="bg-white p-2 rounded border">⌚ ${s.time}</div>
+                        <div class="bg-white p-2 rounded border">📍 ${s.meetingLoc}</div>
+                    </div>
+                `;
+                root.appendChild(card);
+            });
+        });
+
+        function toggleModal(show) { document.getElementById('modal').classList.toggle('hidden', !show); }
+        function showLoading(show) { document.getElementById('loading').style.display = show ? 'flex' : 'none'; }
+
+        async function saveToFirebase() {
+            const site = {
+                client: document.getElementById('f-client').value,
+                office: document.getElementById('f-office').value || '-',
+                siteName: document.getElementById('f-site').value,
+                subject: document.getElementById('f-subject').value || '-',
+                location: document.getElementById('f-loc').value || '未入力',
+                code: document.getElementById('f-code').value || '-',
+                jobType: document.getElementById('f-job').value,
+                desc: document.getElementById('f-desc').value || '',
+                time: document.getElementById('f-time').value || '--:--',
+                meetingLoc: document.getElementById('f-meet-loc').value || '未設定',
+                shift: document.getElementById('f-shift').value,
+                createdAt: new Date()
+            };
+
+            if(!site.client || !site.siteName) return alert("必須項目を入力してください");
+
+            showLoading(true);
+            try {
+                await db.collection("sites").add(site);
+                toggleModal(false);
+                // フォームをリセット
+                document.getElementById('f-client').value = '';
+                document.getElementById('f-site').value = '';
+            } catch (e) { 
+                console.error(e);
+                alert("保存に失敗しました。Firebaseの『ルール』設定がテストモードになっているか確認してください。"); 
+            }
+            showLoading(false);
+        }
+    </script>
+</body>
+</html>
