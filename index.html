@@ -80,7 +80,7 @@
     </div>
 
     <script>
-        // Firebase設定
+        // あなたのFirebase設定
         const firebaseConfig = {
           apiKey: "AIzaSyDrDVqeE3yPhEd38Awv9sakOWaKGtGSmlM",
           authDomain: "genba-b1b17.firebaseapp.com",
@@ -94,19 +94,23 @@
         const db = firebase.firestore();
         let sites = [];
 
-        // リアルタイム同期
+        // データのリアルタイム監視と同期
         db.collection("sites").orderBy("createdAt", "desc").onSnapshot((snapshot) => {
             sites = snapshot.docs.map(doc => ({ firebaseId: doc.id, ...doc.data() }));
             render();
         });
 
+        // 【復活】点呼時間の自動フォーマット関数
         function autoFormatTime(val) {
             let num = val.replace(/[^0-9]/g, '');
             if (num.length === 3) num = "0" + num;
-            if (num.length === 4) return num.substring(0, 2) + ":" + num.substring(2, 4);
+            if (num.length === 4) {
+                return num.substring(0, 2) + ":" + num.substring(2, 4);
+            }
             return val;
         }
 
+        // 【復活】クリップボードから共有URLを貼り付ける関数
         async function pasteMapUrl(targetId) {
             try {
                 const text = await navigator.clipboard.readText();
@@ -114,6 +118,7 @@
                 const finalValue = urlMatch ? urlMatch[0] : text;
                 const input = document.getElementById(targetId);
                 
+                // 編集時の共有URL貼付対応
                 if (targetId.startsWith('edit-loc-')) {
                     const id = targetId.replace('edit-loc-', '');
                     editField(id, 'location', finalValue);
@@ -137,8 +142,12 @@
             var allValid = true;
             requiredIds.forEach(id => {
                 var el = document.getElementById(id);
-                if (!el.value || !el.value.trim()) { el.classList.add('invalid-field'); allValid = false; }
-                else { el.classList.remove('invalid-field'); }
+                if (!el.value || !el.value.trim()) { 
+                    el.classList.add('invalid-field'); 
+                    allValid = false; 
+                } else { 
+                    el.classList.remove('invalid-field'); 
+                }
             });
             var btn = document.getElementById('save-btn');
             btn.disabled = !allValid;
@@ -148,16 +157,19 @@
 
         function openMap(address) {
             if(!address || address === '未入力') return;
+            // 修正履歴部分をカットしてURLを抽出
             const cleanUrl = address.split(' [')[0].trim();
             const url = cleanUrl.indexOf('http') === 0 ? cleanUrl : "https://www.google.com/maps/search/" + encodeURIComponent(cleanUrl);
             window.open(url, '_blank');
         }
 
+        // 修正時の日時スタンプを取得
         function getNow() {
             var n = new Date();
             return "[" + n.getFullYear() + "/" + (n.getMonth()+1) + "/" + n.getDate() + " " + n.getHours() + ":" + n.getMinutes().toString().padStart(2, '0') + "]";
         }
 
+        // 【Firebase化】フィールド編集時の処理
         async function editField(firebaseId, fieldName, newVal) {
             const site = sites.find(s => s.firebaseId === firebaseId);
             if(!site) return;
@@ -165,7 +177,7 @@
             
             let updateData = {};
             if (fieldName === 'time' || fieldName === 'meetingLoc') {
-                var baseVal = site[fieldName] ? site[fieldName].split(' [')[0] : "";
+                var baseVal = site[fieldName] ? site[fieldName].split(' [')[0] : ""; 
                 if (baseVal === newVal) return;
                 updateData[fieldName] = newVal + " " + getNow() + "\n(以前: " + baseVal + ")";
             } else {
@@ -175,9 +187,10 @@
 
             try {
                 await db.collection("sites").doc(firebaseId).update(updateData);
-            } catch (e) { alert("更新に失敗しました"); }
+            } catch (e) { alert("更新に失敗しました。ルールの設定を確認してください。"); }
         }
 
+        // 【Firebase化】新規保存時の処理
         async function saveSite() {
             const site = {
                 client: document.getElementById('f-client').value,
@@ -191,7 +204,7 @@
                 time: document.getElementById('f-time').value || '--:--',
                 meetingLoc: document.getElementById('f-meet-loc').value || '未設定',
                 shift: document.getElementById('f-shift').value,
-                createdAt: new Date()
+                createdAt: new Date() // Firebase並べ替え用
             };
 
             document.getElementById('loading').style.display = 'flex';
@@ -203,6 +216,7 @@
             document.getElementById('loading').style.display = 'none';
         }
 
+        // 【Firebase化】消去時の処理
         async function deleteSite(firebaseId) {
             var input = prompt("消去パスワードを入力してください", "");
             if (input === atob("MT" + "Ey" + "Mg==")) { 
@@ -259,7 +273,7 @@
                             </div>
                             <div class="space-y-2 text-sm text-gray-800">
                                 <p><strong>件名:</strong> ${s.subject}</p>
-                                <div class="p-3 bg-white border border-blue-400 rounded-lg text-blue-700 font-bold relative">
+                                <div class="p-3 bg-white border border-blue-400 rounded-lg text-blue-700 font-bold relative hover:bg-blue-50">
                                     <div onclick="openMap('${s.location}')">📍 現場場所:<br><span class="text-xs underline font-normal break-all">${s.location}</span></div>
                                     <button onclick="pasteMapUrl('edit-loc-${s.firebaseId}')" class="mt-2 w-full bg-blue-100 text-blue-800 text-[10px] py-1 rounded border border-blue-300">共有URLで上書き</button>
                                 </div>
@@ -274,7 +288,7 @@
                                     </div>
                                     <div class="p-2 bg-slate-600 text-white rounded shadow relative">
                                         <span class="text-xs">🏁 点呼場所:</span>
-                                        <textarea onchange="editField('${s.firebaseId}', 'meetingLoc', this.value)" class="w-full mt-1 p-1 bg-slate-500 text-white border-none text-[10px] leading-tight" rows="3">${s.meetingLoc}</textarea>
+                                        <textarea id="val-meet-${s.firebaseId}" onchange="editField('${s.firebaseId}', 'meetingLoc', this.value)" class="w-full mt-1 p-1 bg-slate-500 text-white border-none text-[10px] leading-tight" rows="3">${s.meetingLoc}</textarea>
                                         <button onclick="pasteMapUrl('edit-meet-${s.firebaseId}')" class="w-full bg-slate-700 text-[9px] py-1 mt-1 rounded">共有URLで上書き</button>
                                         <div onclick="openMap('${s.meetingLoc ? s.meetingLoc.split(' [')[0] : ''}')" class="text-center mt-1 underline text-[10px] cursor-pointer">地図を表示</div>
                                     </div>
@@ -289,6 +303,7 @@
                 container.appendChild(clientSection);
             });
         }
+        // render() はFirestoreからのSnapshot通知で自動的に呼ばれます
     </script>
 </body>
 </html>
