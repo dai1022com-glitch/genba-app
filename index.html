@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>現場詳細管理システム (Firebase版)</title>
+    <title>現場詳細管理システム (設定内パスワード不要版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -12,68 +12,120 @@
         .border-night { border: 4px solid #2563eb !important; }
         .bg-day-light { background-color: #fff7ed; }
         .bg-night-light { background-color: #eff6ff; }
-        .invalid-field { border: 2px solid #ef4444 !important; background-color: #fef2f2; }
         #loading { display: none; position: fixed; inset: 0; background: rgba(255,255,255,0.8); z-index: 100; align-items: center; justify-content: center; flex-direction: column; }
+        
+        .job-btn {
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid #d1d5db; border-radius: 8px; padding: 12px 0;
+            background-color: white; font-weight: bold; font-size: 11px; color: #374151;
+            transition: all 0.2s; cursor: pointer;
+        }
+        .job-checkbox:checked + .job-btn {
+            background-color: #5b89f7; color: white; border-color: #4a76e6;
+        }
+
+        .selection-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; margin-bottom: 10px;
+        }
+        .btn-grid-select {
+            background: #f1f5f9; border: 1px solid #cbd5e1; padding: 12px 8px; border-radius: 8px;
+            font-size: 12px; cursor: pointer; text-align: center; font-weight: bold; color: #334155;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .history-label { font-size: 10px; color: #64748b; cursor: pointer; display: block; margin-top: 2px; }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen pb-10">
 
     <div id="loading">
         <div class="animate-spin h-8 w-8 border-4 border-blue-500 rounded-full border-t-transparent mb-2"></div>
-        <p class="text-xs font-bold text-blue-600">同期中...</p>
+        <p class="text-xs font-bold text-blue-600">処理中...</p>
     </div>
 
-    <header class="bg-slate-800 text-white p-4 shadow-lg sticky top-0 z-50">
-        <h1 class="text-center font-bold">現場詳細管理アプリ</h1>
+    <header class="bg-slate-800 text-white p-4 shadow-lg sticky top-0 z-50 flex justify-between items-center">
+        <div class="w-10"></div>
+        <h1 class="font-bold">現場詳細管理アプリ</h1>
+        <button onclick="checkAdminPassword()" class="text-[10px] bg-slate-700 px-2 py-1 rounded">設定</button>
     </header>
 
     <div class="p-4 max-w-xl mx-auto">
-        <div onclick="toggleModal('modal', true)" class="bg-white border-2 border-dashed border-slate-400 rounded-xl p-6 text-center text-slate-600 font-bold cursor-pointer hover:bg-slate-50 mb-6 transition">
-            タップして新規現場を入力
-        </div>
         <div id="display-root" class="space-y-4"></div>
     </div>
 
-    <div id="modal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center p-4">
+    <div id="admin-modal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-md rounded-2xl p-6 overflow-y-auto max-h-[90vh]">
-            <h2 class="text-xl font-bold mb-4 border-b pb-2">現場情報の入力</h2>
+            <h2 class="text-xl font-bold mb-4">設定・新規入力</h2>
+            
+            <div class="space-y-4">
+                <div onclick="openInputModal()" class="bg-blue-50 border-2 border-dashed border-blue-400 rounded-xl p-4 text-center text-blue-700 font-bold cursor-pointer hover:bg-blue-100 transition shadow-sm">
+                    ＋ タップして新規現場を入力
+                </div>
+
+                <div class="p-3 bg-gray-50 rounded-lg">
+                    <p class="font-bold text-sm mb-2">入力候補（元請・現場名）</p>
+                    <div class="flex gap-2">
+                        <input id="new-master-val" type="text" class="flex-1 border p-2 rounded text-sm" placeholder="名称入力">
+                        <button onclick="addMaster()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm">追加</button>
+                    </div>
+                    <div id="master-list" class="mt-3 space-y-1 max-h-32 overflow-y-auto"></div>
+                </div>
+
+                <div class="p-3 bg-blue-50 rounded-lg">
+                    <p class="font-bold text-sm mb-2 text-blue-800">新規現場の登録履歴</p>
+                    <div id="creation-history" class="space-y-2 max-h-48 overflow-y-auto text-[10px]"></div>
+                </div>
+                
+                <button onclick="closeAllModals()" class="w-full bg-gray-200 py-3 rounded-xl font-bold mt-4">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 overflow-y-auto max-h-[90vh] shadow-2xl">
+            <h2 class="text-xl font-bold mb-5 text-gray-800">現場情報の入力</h2>
             <div class="space-y-3" id="site-form">
-                <input id="f-client" type="text" placeholder="元請け会社 (必須)" class="w-full border p-3 rounded-lg bg-gray-50" oninput="checkForm()">
-                <input id="f-office" type="text" placeholder="作業所名" class="w-full border p-3 rounded-lg bg-gray-50">
-                <input id="f-site" type="text" placeholder="現場名 (必須)" class="w-full border p-3 rounded-lg bg-gray-50" oninput="checkForm()">
-                <input id="f-subject" type="text" placeholder="件名" class="w-full border p-3 rounded-lg bg-gray-50">
+                <div>
+                    <input id="f-client" type="text" placeholder="元請け会社 (必須)" class="w-full border p-4 rounded-xl bg-gray-50 border-gray-200 outline-none" onfocus="toggleGrid('client-grid', true)" oninput="checkForm()">
+                    <div id="client-grid" class="selection-grid hidden"></div>
+                </div>
+                <input id="f-office" type="text" placeholder="作業所名" class="w-full border p-4 rounded-xl bg-gray-50 border-gray-200 outline-none">
+                <div>
+                    <input id="f-site" type="text" placeholder="現場名 (必須)" class="w-full border p-4 rounded-xl bg-gray-50 border-gray-200 outline-none" onfocus="toggleGrid('site-grid', true)" oninput="checkForm()">
+                    <div id="site-grid" class="selection-grid hidden"></div>
+                </div>
+                <input id="f-subject" type="text" placeholder="件名" class="w-full border p-4 rounded-xl bg-gray-50 border-gray-200 outline-none">
                 
                 <div class="relative">
-                    <input id="f-loc" type="text" placeholder="現場の場所 (URLなど)" class="w-full border p-3 rounded-lg bg-gray-50">
-                    <button type="button" onclick="pasteMapUrl('f-loc')" class="absolute right-2 top-2 bg-blue-600 text-white text-[10px] px-2 py-2 rounded shadow">共有を貼付</button>
+                    <input id="f-loc" type="text" placeholder="現場の場所" class="w-full border p-4 rounded-xl bg-gray-50 border-gray-200 outline-none">
+                    <button type="button" onclick="pasteMapUrl('f-loc')" class="absolute right-3 top-3 bg-blue-600 text-white text-[10px] px-3 py-2 rounded-lg shadow-sm">共有を貼付</button>
                 </div>
 
-                <input id="f-code" type="text" inputmode="numeric" placeholder="伝票コード" class="w-full border p-3 rounded-lg bg-gray-50">
+                <input id="f-code" type="text" inputmode="numeric" placeholder="伝票コード" class="w-full border p-4 rounded-xl bg-gray-50 border-gray-200 outline-none">
                 
-                <div class="grid grid-cols-2 gap-2">
-                    <select id="f-job" class="border p-3 rounded-lg bg-white font-bold text-sm">
-                        <option value="列車見張り">列車見張り</option>
-                        <option value="交通誘導">交通誘導</option>
-                    </select>
-                    <select id="f-shift" class="border p-3 rounded-lg bg-white font-bold text-sm">
-                        <option value="日勤">日勤</option>
-                        <option value="夜勤">夜勤</option>
-                    </select>
+                <div class="grid grid-cols-3 gap-2 py-1">
+                    <label><input type="checkbox" id="job-1" value="列車見張り" class="job-checkbox hidden" checked onchange="checkForm()"><div class="job-btn">列車見張り</div></label>
+                    <label><input type="checkbox" id="job-2" value="重機誘導" class="job-checkbox hidden" onchange="checkForm()"><div class="job-btn">重機誘導</div></label>
+                    <label><input type="checkbox" id="job-3" value="交通誘導" class="job-checkbox hidden" onchange="checkForm()"><div class="job-btn">交通誘導</div></label>
                 </div>
 
-                <textarea id="f-desc" placeholder="作業内容" class="w-full border p-3 rounded-lg h-24 bg-gray-50 text-sm"></textarea>
+                <select id="f-shift" class="w-full border p-4 rounded-xl bg-white border-gray-200 outline-none font-bold text-sm appearance-none" style="background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2224%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22currentColor%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpolyline points=%226 9 12 15 18 9%22%3E%3C/polyline%3E%3C/svg%3E'); background-repeat: no-repeat; background-position: right 1rem center; background-size: 1em;">
+                    <option value="日勤">日勤</option>
+                    <option value="夜勤">夜勤</option>
+                </select>
+
+                <textarea id="f-desc" placeholder="作業内容" class="w-full border p-4 rounded-xl h-24 bg-gray-50 border-gray-200 outline-none text-sm"></textarea>
                 
-                <div class="grid grid-cols-2 gap-2">
-                    <input id="f-time" type="text" inputmode="numeric" onchange="this.value=autoFormatTime(this.value)" placeholder="点呼時間 (例 800)" class="border p-3 rounded-lg w-full">
+                <div class="grid grid-cols-2 gap-3">
+                    <input id="f-time" type="text" inputmode="numeric" onchange="this.value=autoFormatTime(this.value)" placeholder="点呼時間 (例 800)" class="border p-4 rounded-xl border-gray-200 outline-none text-sm">
                     <div class="relative">
-                        <input id="f-meet-loc" type="text" placeholder="点呼場所" class="border p-3 rounded-lg w-full text-sm">
-                        <button type="button" onclick="pasteMapUrl('f-meet-loc')" class="absolute right-1 top-2 bg-slate-500 text-white text-[10px] px-1 py-2 rounded shadow">共有を貼付</button>
+                        <input id="f-meet-loc" type="text" placeholder="点呼場所" class="border p-4 rounded-xl border-gray-200 outline-none text-sm w-full">
+                        <button type="button" onclick="pasteMapUrl('f-meet-loc')" class="absolute right-2 top-3 bg-slate-500 text-white text-[10px] px-2 py-2 rounded-lg shadow-sm">共有を貼付</button>
                     </div>
                 </div>
 
-                <div class="flex gap-2 pt-4">
-                    <button id="save-btn" onclick="saveSite()" disabled class="flex-1 bg-gray-400 text-white py-4 rounded-xl font-bold shadow-md cursor-not-allowed">必須項目を入力してください</button>
-                    <button type="button" onclick="toggleModal('modal', false)" class="flex-1 bg-gray-200 text-gray-600 py-4 rounded-xl font-bold shadow-md">閉じる</button>
+                <div class="flex gap-3 pt-6">
+                    <button id="save-btn" onclick="saveSite()" disabled class="flex-[2] bg-gray-400 text-white py-4 rounded-2xl font-bold shadow-md cursor-not-allowed text-sm">必須項目を入力してください</button>
+                    <button type="button" onclick="closeInputModal()" class="flex-1 bg-gray-200 text-gray-600 py-4 rounded-2xl font-bold shadow-sm">戻る</button>
                 </div>
             </div>
         </div>
@@ -92,11 +144,67 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         let sites = [];
+        let masterItems = [];
 
-        db.collection("sites").orderBy("createdAt", "desc").onSnapshot((snapshot) => {
-            sites = snapshot.docs.map(doc => ({ firebaseId: doc.id, ...doc.data() }));
-            render();
+        db.collection("sites").orderBy("createdAt", "desc").onSnapshot(s => { sites = s.docs.map(d => ({firebaseId:d.id, ...d.data()})); render(); renderCreationHistory(); });
+        db.collection("master").onSnapshot(s => { 
+            masterItems = s.docs.map(d => ({id:d.id, ...d.data()}));
+            renderGrids();
+            renderMasterList();
         });
+
+        function checkAdminPassword() { if (prompt("パスワードを入力") === "1122") toggleModal('admin-modal', true); }
+
+        function toggleModal(id, show) { document.getElementById(id).classList.toggle('hidden', !show); }
+        function closeAllModals() { toggleModal('modal', false); toggleModal('admin-modal', false); }
+        function openInputModal() { toggleModal('admin-modal', false); toggleModal('modal', true); }
+        function closeInputModal() { toggleModal('modal', false); toggleModal('admin-modal', true); }
+        function toggleGrid(id, show) { document.getElementById(id).classList.toggle('hidden', !show); }
+
+        function selectGrid(inputId, gridId, val) {
+            document.getElementById(inputId).value = val;
+            toggleGrid(gridId, false);
+            checkForm();
+        }
+
+        function renderGrids() {
+            const masters = masterItems.filter(m => !m.isLog);
+            const html = masters.map(m => `<button class="btn-grid-select" onclick="selectGrid('f-client', 'client-grid', '${m.name}')">${m.name}</button>`).join('');
+            const html2 = masters.map(m => `<button class="btn-grid-select" onclick="selectGrid('f-site', 'site-grid', '${m.name}')">${m.name}</button>`).join('');
+            document.getElementById('client-grid').innerHTML = html;
+            document.getElementById('site-grid').innerHTML = html2;
+        }
+
+        function renderMasterList() {
+            document.getElementById('master-list').innerHTML = masterItems.filter(m => !m.isLog).map(m => `
+                <div class="flex justify-between items-center bg-white p-2 rounded border text-xs"><span>${m.name}</span><button onclick="deleteMaster('${m.id}')" class="text-red-500">削除</button></div>
+            `).join('');
+        }
+
+        function renderCreationHistory() {
+            const historyArea = document.getElementById('creation-history');
+            const logs = sites.slice(0, 15).map(s => {
+                const date = s.createdAt ? new Date(s.createdAt.seconds * 1000) : new Date();
+                const ts = `${date.getFullYear()}年${date.getMonth()+1}月${date.getDate()}日 ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+                return `<div class="p-2 border-b border-blue-100 bg-white rounded mb-1 flex justify-between items-start">
+                            <div>
+                                <span class="text-blue-600 font-bold">${ts} 登録</span><br>
+                                ${s.client} / ${s.siteName}
+                            </div>
+                            <button onclick="quickDelete('${s.firebaseId}')" class="text-red-500 font-bold whitespace-nowrap ml-2">削除</button>
+                        </div>`;
+            }).join('');
+            historyArea.innerHTML = logs || '<p class="text-gray-400">履歴はありません</p>';
+        }
+
+        async function addMaster() {
+            const val = document.getElementById('new-master-val').value.trim();
+            if(!val) return;
+            await db.collection("master").add({ name: val, isLog: false });
+            document.getElementById('new-master-val').value = '';
+        }
+
+        async function deleteMaster(id) { if(confirm("候補リストから削除しますか？")) await db.collection("master").doc(id).delete(); }
 
         function autoFormatTime(val) {
             let num = val.replace(/[^0-9]/g, '');
@@ -105,110 +213,107 @@
             return val;
         }
 
-        async function pasteMapUrl(targetId) {
-            try {
-                const text = await navigator.clipboard.readText();
-                const urlMatch = text.match(/https?:\/\/[\w\/:%#\$&\?\(\)~\.=\+\-]+/g);
-                const finalValue = urlMatch ? urlMatch[0] : text;
-                const input = document.getElementById(targetId);
-                
-                if (targetId.startsWith('edit-loc-')) {
-                    editField(targetId.replace('edit-loc-', ''), 'location', finalValue);
-                } else if (targetId.startsWith('edit-meet-')) {
-                    editField(targetId.replace('edit-meet-', ''), 'meetingLoc', finalValue);
-                } else {
-                    input.value = finalValue;
-                }
-                checkForm();
-            } catch (err) { alert("クリップボードへのアクセスを許可してください"); }
-        }
-
-        function toggleModal(id, show) {
-            document.getElementById(id).classList.toggle('hidden', !show);
-            if(show) checkForm();
-        }
-
-        function checkForm() {
-            const requiredIds = ['f-client', 'f-site'];
-            let allValid = true;
-            requiredIds.forEach(id => {
-                const el = document.getElementById(id);
-                if (!el.value || !el.value.trim()) { 
-                    el.classList.add('invalid-field'); 
-                    allValid = false; 
-                } else { 
-                    el.classList.remove('invalid-field'); 
-                }
-            });
-            const btn = document.getElementById('save-btn');
-            btn.disabled = !allValid;
-            btn.className = allValid ? "flex-1 bg-blue-600 text-white py-4 rounded-xl font-bold shadow-md" : "flex-1 bg-gray-400 text-white py-4 rounded-xl font-bold shadow-md cursor-not-allowed";
-            btn.innerText = allValid ? "登録して反映" : "必須項目を入力してください";
-        }
-
-        function openMap(address) {
-            if(!address || address === '未入力') return;
-            const cleanUrl = address.split(' [')[0].trim();
-            const url = cleanUrl.indexOf('http') === 0 ? cleanUrl : "https://www.google.com/maps/search/" + encodeURIComponent(cleanUrl);
-            window.open(url, '_blank');
-        }
-
-        function getNow() {
+        function getNowFull() {
             const n = new Date();
-            return "[" + n.getFullYear() + "/" + (n.getMonth()+1) + "/" + n.getDate() + " " + n.getHours() + ":" + n.getMinutes().toString().padStart(2, '0') + "]";
+            return `${n.getFullYear()}年${n.getMonth()+1}月${n.getDate()}日 ${n.getHours()}:${n.getMinutes().toString().padStart(2, '0')}`;
         }
 
         async function editField(firebaseId, fieldName, newVal) {
             const site = sites.find(s => s.firebaseId === firebaseId);
             if(!site) return;
             if (fieldName === 'time') newVal = autoFormatTime(newVal);
-            
+            const oldValWithHistory = site[fieldName] || "";
+            const oldRawVal = oldValWithHistory.split(' [')[0];
+            if (oldRawVal === newVal) return;
             let updateData = {};
-            if (fieldName === 'time' || fieldName === 'meetingLoc') {
-                const baseVal = site[fieldName] ? site[fieldName].split(' [')[0] : ""; 
-                if (baseVal === newVal) return;
-                updateData[fieldName] = newVal + " " + getNow() + "\n(以前: " + baseVal + ")";
-            } else {
-                if (site[fieldName] === newVal) return;
-                updateData[fieldName] = newVal;
-            }
+            updateData[fieldName] = `${newVal} [${getNowFull()} 変更]\n(以前: ${oldRawVal})`;
             try { await db.collection("sites").doc(firebaseId).update(updateData); } catch (e) { alert("更新失敗"); }
         }
 
+        async function pasteMapUrl(targetId) {
+            try {
+                const text = await navigator.clipboard.readText();
+                const urlMatch = text.match(/https?:\/\/[\w\/:%#\$&\?\(\)~\.=\+\-]+/g);
+                const finalValue = urlMatch ? urlMatch[0] : text;
+                if (targetId.startsWith('edit-loc-')) { editField(targetId.replace('edit-loc-', ''), 'location', finalValue); }
+                else if (targetId.startsWith('edit-meet-')) { editField(targetId.replace('edit-meet-', ''), 'meetingLoc', finalValue); }
+                else { document.getElementById(targetId).value = finalValue; }
+                checkForm();
+            } catch (err) { alert("クリップボード権限が必要です"); }
+        }
+
+        function checkForm() {
+            const c = document.getElementById('f-client').value.trim();
+            const s = document.getElementById('f-site').value.trim();
+            const jobSelected = Array.from(document.querySelectorAll('.job-checkbox:checked')).length > 0;
+            const btn = document.getElementById('save-btn');
+            const valid = c && s && jobSelected;
+            btn.disabled = !valid;
+            btn.className = valid ? "flex-[2] bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-md" : "flex-[2] bg-gray-400 text-white py-4 rounded-2xl font-bold shadow-md cursor-not-allowed text-sm";
+            btn.innerText = valid ? "登録して反映" : "必須項目を入力してください";
+        }
+
+        function openMap(address) {
+            if(!address || address === '未入力') return;
+            window.open(address.split(' [')[0].trim().indexOf('http') === 0 ? address.split(' [')[0].trim() : "https://www.google.com/maps/search/" + encodeURIComponent(address), '_blank');
+        }
+
         async function saveSite() {
-            const site = {
-                client: document.getElementById('f-client').value,
-                office: document.getElementById('f-office').value || '不明',
-                siteName: document.getElementById('f-site').value,
-                subject: document.getElementById('f-subject').value || 'なし',
-                location: document.getElementById('f-loc').value || '未入力',
-                code: document.getElementById('f-code').value || '-',
-                jobType: document.getElementById('f-job').value,
-                desc: document.getElementById('f-desc').value || '',
-                time: document.getElementById('f-time').value || '--:--',
-                meetingLoc: document.getElementById('f-meet-loc').value || '未設定',
-                shift: document.getElementById('f-shift').value,
-                createdAt: new Date()
-            };
+            const selectedJobs = Array.from(document.querySelectorAll('.job-checkbox:checked')).map(cb => cb.value);
             document.getElementById('loading').style.display = 'flex';
             try {
-                await db.collection("sites").add(site);
-                toggleModal('modal', false);
-                document.querySelectorAll('#site-form input, #site-form textarea').forEach(el => el.value = '');
+                for (const job of selectedJobs) {
+                    await db.collection("sites").add({
+                        client: document.getElementById('f-client').value,
+                        office: document.getElementById('f-office').value || '不明',
+                        siteName: document.getElementById('f-site').value,
+                        subject: document.getElementById('f-subject').value || 'なし',
+                        location: document.getElementById('f-loc').value || '未入力',
+                        code: document.getElementById('f-code').value || '-',
+                        jobType: job,
+                        desc: document.getElementById('f-desc').value || '',
+                        time: document.getElementById('f-time').value || '--:--',
+                        meetingLoc: document.getElementById('f-meet-loc').value || '未設定',
+                        shift: document.getElementById('f-shift').value,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+                closeAllModals();
+                document.querySelectorAll('#site-form input, #site-form textarea').forEach(el => { if(el.type !== 'checkbox') el.value = ''; });
             } catch (e) { alert("保存失敗"); }
             document.getElementById('loading').style.display = 'none';
         }
 
-        async function deleteSite(firebaseId) {
-            const input = prompt("消去パスワードを入力してください", "");
-            if (input === atob("MT" + "Ey" + "Mg==")) { 
-                try { await db.collection("sites").doc(firebaseId).delete(); } catch (e) { alert("消去失敗"); }
-            } else if (input !== null) { alert("パスワードが違います"); }
+        // メイン画面の消去ボタン（パスワード必要）
+        async function deleteSite(id) { 
+            if (prompt("消去用パスワードを入力してください") === "1122") {
+                await db.collection("sites").doc(id).delete(); 
+            } else {
+                alert("パスワードが違います");
+            }
         }
 
-        function toggleSection(id) {
-            const el = document.getElementById(id);
-            if(el) el.classList.toggle('hidden');
+        // 設定画面内の消去（パスワード不要）
+        async function quickDelete(id) {
+            if (confirm("この現場データを削除しますか？")) {
+                await db.collection("sites").doc(id).delete();
+            }
+        }
+        
+        function toggleSection(id) { document.getElementById(id).classList.toggle('hidden'); }
+
+        function formatDisplayValue(val) {
+            if (!val) return { main: "", history: "" };
+            const parts = val.split(' [');
+            const main = parts[0];
+            let history = "";
+            let oldVal = "";
+            if (parts[1]) {
+                const historyParts = parts[1].split(']\n(以前: ');
+                history = historyParts[0];
+                oldVal = historyParts[1] ? historyParts[1].replace(')', '') : "";
+            }
+            return { main, history, oldVal };
         }
 
         function render() {
@@ -217,9 +322,9 @@
             const clients = [...new Set(sites.map(s => s.client))];
 
             clients.forEach(clientName => {
+                const safeClientId = "c-" + btoa(encodeURIComponent(clientName)).replace(/=/g,'');
                 const clientSection = document.createElement('div');
                 clientSection.className = "mb-4 border border-gray-300 rounded-lg overflow-hidden shadow-sm bg-white";
-                const safeClientId = "c-" + btoa(encodeURIComponent(clientName)).replace(/=/g,'');
                 clientSection.innerHTML = `<div onclick="toggleSection('${safeClientId}')" class="bg-slate-700 text-white p-4 font-bold flex justify-between items-center cursor-pointer"><span>🏢 ${clientName}</span><span>▼</span></div><div id="${safeClientId}" class="hidden bg-gray-50 p-2 space-y-2"></div>`;
                 const clientInner = clientSection.querySelector('#' + safeClientId);
 
@@ -233,46 +338,52 @@
                 Object.keys(siteGroups).forEach(key => {
                     const group = siteGroups[key];
                     const first = group[0];
+                    const detailId = "group-" + first.firebaseId;
                     const groupBox = document.createElement('div');
                     groupBox.className = "bg-white border rounded shadow-sm overflow-hidden mb-2";
-                    const detailId = "group-" + first.firebaseId;
-                    groupBox.innerHTML = `<div onclick="toggleSection('${detailId}')" class="p-3 font-bold text-gray-700 flex justify-between cursor-pointer hover:bg-blue-50"><span>🚧 ${first.office} / ${first.siteName}</span><span class="text-blue-500 text-xs">${group.length > 1 ? group.length + '件' : '詳細'}</span></div><div id="${detailId}" class="hidden p-2 border-t space-y-3"></div>`;
+                    groupBox.innerHTML = `<div onclick="toggleSection('${detailId}')" class="p-3 font-bold text-gray-700 flex justify-between cursor-pointer hover:bg-blue-50 shadow-sm border-l-4 border-slate-500"><span>🚧 ${first.office} / ${first.siteName}</span><span class="text-blue-500 text-xs">${group.length}件</span></div><div id="${detailId}" class="hidden p-2 border-t space-y-3 bg-gray-50"></div>`;
                     const detailArea = groupBox.querySelector('#' + detailId);
                     
                     group.forEach(s => {
                         const shiftClass = s.shift === '日勤' ? 'border-day bg-day-light' : 'border-night bg-night-light';
                         const shiftTextClass = s.shift === '日勤' ? 'text-orange-600' : 'text-blue-700';
+                        const vLoc = formatDisplayValue(s.location);
+                        const vDesc = formatDisplayValue(s.desc);
+                        const vTime = formatDisplayValue(s.time);
+                        const vMeet = formatDisplayValue(s.meetingLoc);
+
                         const itemDiv = document.createElement('div');
-                        itemDiv.className = `p-4 border-2 rounded-lg mb-2 ${shiftClass}`;
+                        itemDiv.className = `p-4 border-2 rounded-lg mb-2 ${shiftClass} shadow-sm`;
                         itemDiv.innerHTML = `
-                            <div class="flex justify-between font-black text-lg ${shiftTextClass} mb-2">
-                                <span>${s.shift} 【${s.jobType}】</span>
-                                <span class="text-sm bg-white px-2 py-1 rounded border">コード: ${s.code}</span>
-                            </div>
+                            <div class="flex justify-between font-black text-lg ${shiftTextClass} mb-2"><span>${s.shift} 【${s.jobType}】</span><span class="text-sm bg-white px-2 py-1 rounded border">コード: ${s.code}</span></div>
                             <div class="space-y-2 text-sm text-gray-800">
                                 <p><strong>件名:</strong> ${s.subject}</p>
-                                <div class="p-3 bg-white border border-blue-400 rounded-lg text-blue-700 font-bold relative hover:bg-blue-50">
-                                    <div onclick="openMap('${s.location}')">📍 現場場所:<br><span class="text-xs underline font-normal break-all">${s.location}</span></div>
+                                <div class="p-3 bg-white border border-blue-400 rounded-lg text-blue-700 font-bold relative hover:bg-blue-50 shadow-sm">
+                                    <div onclick="openMap('${vLoc.main}')">📍 現場場所:<br><span class="text-xs underline font-normal break-all">${vLoc.main}</span></div>
+                                    ${vLoc.history ? `<span class="history-label" onclick="alert('以前: ${vLoc.oldVal}')">${vLoc.history}</span>` : ''}
                                     <button onclick="pasteMapUrl('edit-loc-${s.firebaseId}')" class="mt-2 w-full bg-blue-100 text-blue-800 text-[10px] py-1 rounded border border-blue-300">共有URLで上書き</button>
                                 </div>
-                                <div class="p-2 bg-white rounded border border-gray-300">
+                                <div class="p-2 bg-white rounded border border-gray-300 shadow-inner">
                                     <strong>作業内容:</strong>
-                                    <textarea onchange="editField('${s.firebaseId}', 'desc', this.value)" class="w-full mt-1 p-2 bg-yellow-50 rounded border-none h-20 text-sm">${s.desc}</textarea>
+                                    <textarea onchange="editField('${s.firebaseId}', 'desc', this.value)" class="w-full mt-1 p-2 bg-yellow-50 rounded border-none h-20 text-sm">${vDesc.main}</textarea>
+                                    ${vDesc.history ? `<span class="history-label" onclick="alert('以前: ${vDesc.oldVal}')">${vDesc.history}</span>` : ''}
                                 </div>
                                 <div class="grid grid-cols-2 gap-2 mt-2">
-                                    <div class="p-2 bg-white rounded border">
+                                    <div class="p-2 bg-white rounded border shadow-inner">
                                         <strong>点呼時間:</strong>
-                                        <textarea onchange="editField('${s.firebaseId}', 'time', this.value)" inputmode="numeric" class="w-full mt-1 p-1 bg-red-50 text-red-600 font-bold border-none text-xs" rows="3">${s.time}</textarea>
+                                        <textarea onchange="editField('${s.firebaseId}', 'time', this.value)" inputmode="numeric" class="w-full mt-1 p-1 bg-red-50 text-red-600 font-bold border-none text-xs" rows="3">${vTime.main}</textarea>
+                                        ${vTime.history ? `<span class="history-label" onclick="alert('以前: ${vTime.oldVal}')">${vTime.history}</span>` : ''}
                                     </div>
                                     <div class="p-2 bg-slate-600 text-white rounded shadow relative">
                                         <span class="text-xs">🏁 点呼場所:</span>
-                                        <textarea onchange="editField('${s.firebaseId}', 'meetingLoc', this.value)" class="w-full mt-1 p-1 bg-slate-500 text-white border-none text-[10px] leading-tight" rows="3">${s.meetingLoc}</textarea>
+                                        <textarea onchange="editField('${s.firebaseId}', 'meetingLoc', this.value)" class="w-full mt-1 p-1 bg-slate-500 text-white border-none text-[10px] leading-tight" rows="3">${vMeet.main}</textarea>
+                                        ${vMeet.history ? `<span class="history-label text-slate-300" onclick="alert('以前: ${vMeet.oldVal}')">${vMeet.history}</span>` : ''}
                                         <button onclick="pasteMapUrl('edit-meet-${s.firebaseId}')" class="w-full bg-slate-700 text-[9px] py-1 mt-1 rounded">共有URLで上書き</button>
-                                        <div onclick="openMap('${s.meetingLoc ? s.meetingLoc.split(' [')[0] : ''}')" class="text-center mt-1 underline text-[10px] cursor-pointer">地図を表示</div>
+                                        <div onclick="openMap('${vMeet.main}')" class="text-center mt-1 underline text-[10px] cursor-pointer">地図を表示</div>
                                     </div>
                                 </div>
                             </div>
-                            <button onclick="deleteSite('${s.firebaseId}')" class="w-full mt-4 py-2 text-red-400 border border-red-200 rounded text-xs">消去</button>
+                            <button onclick="deleteSite('${s.firebaseId}')" class="w-full mt-4 py-2 text-red-400 border border-red-200 rounded text-xs bg-white/50">消去</button>
                         `;
                         detailArea.appendChild(itemDiv);
                     });
