@@ -44,7 +44,7 @@
                 <input id="f-subject" type="text" placeholder="件名" class="w-full border p-3 rounded-lg bg-gray-50">
                 
                 <div class="relative">
-                    <input id="f-loc" type="text" placeholder="現場の場所" class="w-full border p-3 rounded-lg bg-gray-50">
+                    <input id="f-loc" type="text" placeholder="現場の場所 (URLなど)" class="w-full border p-3 rounded-lg bg-gray-50">
                     <button type="button" onclick="pasteMapUrl('f-loc')" class="absolute right-2 top-2 bg-blue-600 text-white text-[10px] px-2 py-2 rounded shadow">共有を貼付</button>
                 </div>
 
@@ -80,7 +80,6 @@
     </div>
 
     <script>
-        // あなたのFirebase設定
         const firebaseConfig = {
           apiKey: "AIzaSyDrDVqeE3yPhEd38Awv9sakOWaKGtGSmlM",
           authDomain: "genba-b1b17.firebaseapp.com",
@@ -94,23 +93,18 @@
         const db = firebase.firestore();
         let sites = [];
 
-        // データのリアルタイム監視と同期
         db.collection("sites").orderBy("createdAt", "desc").onSnapshot((snapshot) => {
             sites = snapshot.docs.map(doc => ({ firebaseId: doc.id, ...doc.data() }));
             render();
         });
 
-        // 【復活】点呼時間の自動フォーマット関数
         function autoFormatTime(val) {
             let num = val.replace(/[^0-9]/g, '');
             if (num.length === 3) num = "0" + num;
-            if (num.length === 4) {
-                return num.substring(0, 2) + ":" + num.substring(2, 4);
-            }
+            if (num.length === 4) return num.substring(0, 2) + ":" + num.substring(2, 4);
             return val;
         }
 
-        // 【復活】クリップボードから共有URLを貼り付ける関数
         async function pasteMapUrl(targetId) {
             try {
                 const text = await navigator.clipboard.readText();
@@ -118,18 +112,15 @@
                 const finalValue = urlMatch ? urlMatch[0] : text;
                 const input = document.getElementById(targetId);
                 
-                // 編集時の共有URL貼付対応
                 if (targetId.startsWith('edit-loc-')) {
-                    const id = targetId.replace('edit-loc-', '');
-                    editField(id, 'location', finalValue);
+                    editField(targetId.replace('edit-loc-', ''), 'location', finalValue);
                 } else if (targetId.startsWith('edit-meet-')) {
-                    const id = targetId.replace('edit-meet-', '');
-                    editField(id, 'meetingLoc', finalValue);
+                    editField(targetId.replace('edit-meet-', ''), 'meetingLoc', finalValue);
                 } else {
                     input.value = finalValue;
                 }
                 checkForm();
-            } catch (err) { alert("アクセス権限を許可してください"); }
+            } catch (err) { alert("クリップボードへのアクセスを許可してください"); }
         }
 
         function toggleModal(id, show) {
@@ -138,10 +129,10 @@
         }
 
         function checkForm() {
-            var requiredIds = ['f-client', 'f-site'];
-            var allValid = true;
+            const requiredIds = ['f-client', 'f-site'];
+            let allValid = true;
             requiredIds.forEach(id => {
-                var el = document.getElementById(id);
+                const el = document.getElementById(id);
                 if (!el.value || !el.value.trim()) { 
                     el.classList.add('invalid-field'); 
                     allValid = false; 
@@ -149,7 +140,7 @@
                     el.classList.remove('invalid-field'); 
                 }
             });
-            var btn = document.getElementById('save-btn');
+            const btn = document.getElementById('save-btn');
             btn.disabled = !allValid;
             btn.className = allValid ? "flex-1 bg-blue-600 text-white py-4 rounded-xl font-bold shadow-md" : "flex-1 bg-gray-400 text-white py-4 rounded-xl font-bold shadow-md cursor-not-allowed";
             btn.innerText = allValid ? "登録して反映" : "必須項目を入力してください";
@@ -157,19 +148,16 @@
 
         function openMap(address) {
             if(!address || address === '未入力') return;
-            // 修正履歴部分をカットしてURLを抽出
             const cleanUrl = address.split(' [')[0].trim();
             const url = cleanUrl.indexOf('http') === 0 ? cleanUrl : "https://www.google.com/maps/search/" + encodeURIComponent(cleanUrl);
             window.open(url, '_blank');
         }
 
-        // 修正時の日時スタンプを取得
         function getNow() {
-            var n = new Date();
+            const n = new Date();
             return "[" + n.getFullYear() + "/" + (n.getMonth()+1) + "/" + n.getDate() + " " + n.getHours() + ":" + n.getMinutes().toString().padStart(2, '0') + "]";
         }
 
-        // 【Firebase化】フィールド編集時の処理
         async function editField(firebaseId, fieldName, newVal) {
             const site = sites.find(s => s.firebaseId === firebaseId);
             if(!site) return;
@@ -177,20 +165,16 @@
             
             let updateData = {};
             if (fieldName === 'time' || fieldName === 'meetingLoc') {
-                var baseVal = site[fieldName] ? site[fieldName].split(' [')[0] : ""; 
+                const baseVal = site[fieldName] ? site[fieldName].split(' [')[0] : ""; 
                 if (baseVal === newVal) return;
                 updateData[fieldName] = newVal + " " + getNow() + "\n(以前: " + baseVal + ")";
             } else {
                 if (site[fieldName] === newVal) return;
                 updateData[fieldName] = newVal;
             }
-
-            try {
-                await db.collection("sites").doc(firebaseId).update(updateData);
-            } catch (e) { alert("更新に失敗しました。ルールの設定を確認してください。"); }
+            try { await db.collection("sites").doc(firebaseId).update(updateData); } catch (e) { alert("更新失敗"); }
         }
 
-        // 【Firebase化】新規保存時の処理
         async function saveSite() {
             const site = {
                 client: document.getElementById('f-client').value,
@@ -204,67 +188,61 @@
                 time: document.getElementById('f-time').value || '--:--',
                 meetingLoc: document.getElementById('f-meet-loc').value || '未設定',
                 shift: document.getElementById('f-shift').value,
-                createdAt: new Date() // Firebase並べ替え用
+                createdAt: new Date()
             };
-
             document.getElementById('loading').style.display = 'flex';
             try {
                 await db.collection("sites").add(site);
                 toggleModal('modal', false);
                 document.querySelectorAll('#site-form input, #site-form textarea').forEach(el => el.value = '');
-            } catch (e) { alert("保存に失敗しました。ルールの設定を確認してください。"); }
+            } catch (e) { alert("保存失敗"); }
             document.getElementById('loading').style.display = 'none';
         }
 
-        // 【Firebase化】消去時の処理
         async function deleteSite(firebaseId) {
-            var input = prompt("消去パスワードを入力してください", "");
+            const input = prompt("消去パスワードを入力してください", "");
             if (input === atob("MT" + "Ey" + "Mg==")) { 
-                try {
-                    await db.collection("sites").doc(firebaseId).delete();
-                } catch (e) { alert("消去に失敗しました"); }
-            } else if (input !== null) {
-                alert("パスワードが正しくありません");
-            }
+                try { await db.collection("sites").doc(firebaseId).delete(); } catch (e) { alert("消去失敗"); }
+            } else if (input !== null) { alert("パスワードが違います"); }
         }
 
         function toggleSection(id) {
-            var el = document.getElementById(id);
+            const el = document.getElementById(id);
             if(el) el.classList.toggle('hidden');
         }
 
         function render() {
-            var container = document.getElementById('display-root');
+            const container = document.getElementById('display-root');
             container.innerHTML = '';
-            var clients = [...new Set(sites.map(s => s.client))];
+            const clients = [...new Set(sites.map(s => s.client))];
 
             clients.forEach(clientName => {
-                var clientSection = document.createElement('div');
+                const clientSection = document.createElement('div');
                 clientSection.className = "mb-4 border border-gray-300 rounded-lg overflow-hidden shadow-sm bg-white";
-                var safeClientId = "c-" + btoa(encodeURIComponent(clientName)).replace(/=/g,'');
+                const safeClientId = "c-" + btoa(encodeURIComponent(clientName)).replace(/=/g,'');
                 clientSection.innerHTML = `<div onclick="toggleSection('${safeClientId}')" class="bg-slate-700 text-white p-4 font-bold flex justify-between items-center cursor-pointer"><span>🏢 ${clientName}</span><span>▼</span></div><div id="${safeClientId}" class="hidden bg-gray-50 p-2 space-y-2"></div>`;
-                var clientInner = clientSection.querySelector('#' + safeClientId);
+                const clientInner = clientSection.querySelector('#' + safeClientId);
 
-                var siteGroups = {};
+                const siteGroups = {};
                 sites.filter(s => s.client === clientName).forEach(s => {
-                    var groupKey = s.office + s.siteName + (s.subject||'') + (s.code||'');
+                    const groupKey = s.office + s.siteName + (s.subject||'') + (s.code||'');
                     if (!siteGroups[groupKey]) siteGroups[groupKey] = [];
                     siteGroups[groupKey].push(s);
                 });
 
                 Object.keys(siteGroups).forEach(key => {
-                    var group = siteGroups[key];
-                    var first = group[0];
-                    var groupBox = document.createElement('div');
+                    const group = siteGroups[key];
+                    const first = group[0];
+                    const groupBox = document.createElement('div');
                     groupBox.className = "bg-white border rounded shadow-sm overflow-hidden mb-2";
-                    var detailId = "group-" + first.firebaseId;
+                    const detailId = "group-" + first.firebaseId;
                     groupBox.innerHTML = `<div onclick="toggleSection('${detailId}')" class="p-3 font-bold text-gray-700 flex justify-between cursor-pointer hover:bg-blue-50"><span>🚧 ${first.office} / ${first.siteName}</span><span class="text-blue-500 text-xs">${group.length > 1 ? group.length + '件' : '詳細'}</span></div><div id="${detailId}" class="hidden p-2 border-t space-y-3"></div>`;
-                    var detailArea = groupBox.querySelector('#' + detailId);
+                    const detailArea = groupBox.querySelector('#' + detailId);
                     
                     group.forEach(s => {
-                        var shiftClass = s.shift === '日勤' ? 'border-day bg-day-light' : 'border-night bg-night-light';
-                        var shiftTextClass = s.shift === '日勤' ? 'text-orange-600' : 'text-blue-700';
-                        var itemDiv = document.createElement('div');
+                        const shiftClass = s.shift === '日勤' ? 'border-day bg-day-light' : 'border-night bg-night-light';
+                        const shiftTextClass = s.shift === '日勤' ? 'text-orange-600' : 'text-blue-700';
+                        const itemDiv = document.createElement('div');
                         itemDiv.className = `p-4 border-2 rounded-lg mb-2 ${shiftClass}`;
                         itemDiv.innerHTML = `
                             <div class="flex justify-between font-black text-lg ${shiftTextClass} mb-2">
@@ -288,7 +266,7 @@
                                     </div>
                                     <div class="p-2 bg-slate-600 text-white rounded shadow relative">
                                         <span class="text-xs">🏁 点呼場所:</span>
-                                        <textarea id="val-meet-${s.firebaseId}" onchange="editField('${s.firebaseId}', 'meetingLoc', this.value)" class="w-full mt-1 p-1 bg-slate-500 text-white border-none text-[10px] leading-tight" rows="3">${s.meetingLoc}</textarea>
+                                        <textarea onchange="editField('${s.firebaseId}', 'meetingLoc', this.value)" class="w-full mt-1 p-1 bg-slate-500 text-white border-none text-[10px] leading-tight" rows="3">${s.meetingLoc}</textarea>
                                         <button onclick="pasteMapUrl('edit-meet-${s.firebaseId}')" class="w-full bg-slate-700 text-[9px] py-1 mt-1 rounded">共有URLで上書き</button>
                                         <div onclick="openMap('${s.meetingLoc ? s.meetingLoc.split(' [')[0] : ''}')" class="text-center mt-1 underline text-[10px] cursor-pointer">地図を表示</div>
                                     </div>
@@ -303,7 +281,6 @@
                 container.appendChild(clientSection);
             });
         }
-        // render() はFirestoreからのSnapshot通知で自動的に呼ばれます
     </script>
 </body>
 </html>
