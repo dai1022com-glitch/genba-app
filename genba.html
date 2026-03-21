@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>現場詳細管理システム</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .border-day { border: 4px solid #f97316 !important; }
+        .border-night { border: 4px solid #2563eb !important; }
+        .bg-day-light { background-color: #fff7ed; }
+        .bg-night-light { background-color: #eff6ff; }
+        .invalid-field { border: 2px solid #ef4444 !important; background-color: #fef2f2; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen pb-10">
+
+    <header class="bg-slate-800 text-white p-4 shadow-lg sticky top-0 z-50">
+        <h1 class="text-center font-bold">現場詳細管理アプリ</h1>
+    </header>
+
+    <div class="p-4 max-w-xl mx-auto">
+        <div onclick="toggleModal('modal', true)" class="bg-white border-2 border-dashed border-slate-400 rounded-xl p-6 text-center text-slate-600 font-bold cursor-pointer hover:bg-slate-50 mb-6 transition">
+            タップして新規現場を入力
+        </div>
+        <div id="display-root" class="space-y-4"></div>
+    </div>
+
+    <div id="modal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 overflow-y-auto max-h-[90vh]">
+            <h2 class="text-xl font-bold mb-4 border-b pb-2">現場情報の入力</h2>
+            <div class="space-y-3" id="site-form">
+                <input id="f-client" type="text" placeholder="元請け会社 (必須)" class="w-full border p-3 rounded-lg bg-gray-50" oninput="checkForm()">
+                <input id="f-office" type="text" placeholder="作業所名" class="w-full border p-3 rounded-lg bg-gray-50">
+                <input id="f-site" type="text" placeholder="現場名 (必須)" class="w-full border p-3 rounded-lg bg-gray-50" oninput="checkForm()">
+                <input id="f-subject" type="text" placeholder="件名" class="w-full border p-3 rounded-lg bg-gray-50">
+                
+                <div class="relative">
+                    <input id="f-loc" type="text" placeholder="現場の場所" class="w-full border p-3 rounded-lg bg-gray-50">
+                    <button type="button" onclick="pasteMapUrl('f-loc')" class="absolute right-2 top-2 bg-blue-600 text-white text-[10px] px-2 py-2 rounded shadow">共有を貼付</button>
+                </div>
+
+                <input id="f-code" type="text" inputmode="numeric" placeholder="伝票コード" class="w-full border p-3 rounded-lg bg-gray-50">
+                
+                <div class="grid grid-cols-2 gap-2">
+                    <select id="f-job" class="border p-3 rounded-lg bg-white font-bold text-sm">
+                        <option value="列車見張り">列車見張り</option>
+                        <option value="交通誘導">交通誘導</option>
+                    </select>
+                    <select id="f-shift" class="border p-3 rounded-lg bg-white font-bold text-sm">
+                        <option value="日勤">日勤</option>
+                        <option value="夜勤">夜勤</option>
+                    </select>
+                </div>
+
+                <textarea id="f-desc" placeholder="作業内容" class="w-full border p-3 rounded-lg h-24 bg-gray-50 text-sm"></textarea>
+                
+                <div class="grid grid-cols-2 gap-2">
+                    <input id="f-time" type="text" inputmode="numeric" onchange="this.value=autoFormatTime(this.value)" placeholder="点呼時間 (例 800)" class="border p-3 rounded-lg w-full">
+                    <div class="relative">
+                        <input id="f-meet-loc" type="text" placeholder="点呼場所" class="border p-3 rounded-lg w-full text-sm">
+                        <button type="button" onclick="pasteMapUrl('f-meet-loc')" class="absolute right-1 top-2 bg-slate-500 text-white text-[10px] px-1 py-2 rounded shadow">共有を貼付</button>
+                    </div>
+                </div>
+
+                <div class="flex gap-2 pt-4">
+                    <button id="save-btn" onclick="saveSite()" disabled class="flex-1 bg-gray-400 text-white py-4 rounded-xl font-bold shadow-md cursor-not-allowed">必須項目を入力してください</button>
+                    <button type="button" onclick="toggleModal('modal', false)" class="flex-1 bg-gray-200 text-gray-600 py-4 rounded-xl font-bold shadow-md">閉じる</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var sites = JSON.parse(localStorage.getItem('site_data_shared') || '[]');
+
+        function autoFormatTime(val) {
+            let num = val.replace(/[^0-9]/g, '');
+            if (num.length === 3) num = "0" + num;
+            if (num.length === 4) {
+                return num.substring(0, 2) + ":" + num.substring(2, 4);
+            }
+            return val;
+        }
+
+        async function pasteMapUrl(targetId) {
+            try {
+                const text = await navigator.clipboard.readText();
+                const urlMatch = text.match(/https?:\/\/[\w\/:%#\$&\?\(\)~\.=\+\-]+/g);
+                const finalValue = urlMatch ? urlMatch[0] : text;
+                const input = document.getElementById(targetId);
+                input.value = finalValue;
+                if (targetId.startsWith('edit-loc-')) {
+                    editField(parseInt(targetId.replace('edit-loc-', '')), 'location', finalValue);
+                } else if (targetId.startsWith('edit-meet-')) {
+                    editField(parseInt(targetId.replace('edit-meet-', '')), 'meetingLoc', finalValue);
+                }
+                checkForm();
+            } catch (err) { alert("アクセス権限を許可してください"); }
+        }
+
+        function toggleModal(id, show) {
+            document.getElementById(id).classList.toggle('hidden', !show);
+            if(show) checkForm();
+        }
+
+        function checkForm() {
+            var requiredIds = ['f-client', 'f-site'];
+            var allValid = true;
+            requiredIds.forEach(id => {
+                var el = document.getElementById(id);
+                if (!el.value || !el.value.trim()) { 
+                    el.classList.add('invalid-field'); 
+                    allValid = false; 
+                } else { 
+                    el.classList.remove('invalid-field'); 
+                }
+            });
+            var btn = document.getElementById('save-btn');
+            btn.disabled = !allValid;
+            btn.className = allValid ? "flex-1 bg-blue-600 text-white py-4 rounded-xl font-bold shadow-md" : "flex-1 bg-gray-400 text-white py-4 rounded-xl font-bold shadow-md cursor-not-allowed";
+            btn.innerText = allValid ? "登録して反映" : "必須項目を入力してください";
+        }
+
+        function openMap(address) {
+            if(!address || address === '未入力') return;
+            const cleanUrl = address.split('\n')[0].trim();
+            const url = cleanUrl.indexOf('http') === 0 ? cleanUrl : "https://www.google.com/maps/search/" + encodeURIComponent(cleanUrl);
+            window.open(url, '_blank');
+        }
+
+        function getNow() {
+            var n = new Date();
+            return "[" + n.getFullYear() + "/" + (n.getMonth()+1) + "/" + n.getDate() + " " + n.getHours() + ":" + n.getMinutes().toString().padStart(2, '0') + "]";
+        }
+
+        function editField(id, fieldName, newVal) {
+            var idx = sites.findIndex(s => s.id === id);
+            if(idx === -1) return;
+            if (fieldName === 'time') newVal = autoFormatTime(newVal);
+            var oldVal = sites[idx][fieldName];
+            if (oldVal === newVal) return;
+            if (fieldName === 'time' || fieldName === 'meetingLoc') {
+                var baseVal = oldVal ? oldVal.split('\n')[0] : ""; 
+                sites[idx][fieldName] = newVal + " " + getNow() + "\n(以前: " + baseVal + ")";
+            } else {
+                sites[idx][fieldName] = newVal;
+            }
+            localStorage.setItem('site_data_shared', JSON.stringify(sites));
+            render();
+        }
+
+        function saveSite() {
+            var site = {
+                id: Date.now(),
+                client: document.getElementById('f-client').value,
+                office: document.getElementById('f-office').value || '不明',
+                siteName: document.getElementById('f-site').value,
+                subject: document.getElementById('f-subject').value || 'なし',
+                location: document.getElementById('f-loc').value || '未入力',
+                code: document.getElementById('f-code').value || '-',
+                jobType: document.getElementById('f-job').value,
+                desc: document.getElementById('f-desc').value || '',
+                time: document.getElementById('f-time').value || '--:--',
+                meetingLoc: document.getElementById('f-meet-loc').value || '未設定',
+                shift: document.getElementById('f-shift').value
+            };
+            sites.push(site);
+            localStorage.setItem('site_data_shared', JSON.stringify(sites));
+            toggleModal('modal', false);
+            render();
+            document.querySelectorAll('#site-form input, #site-form textarea').forEach(el => el.value = '');
+        }
+
+        function deleteSite(id) {
+            var input = prompt("消去パスワードを入力してください", "");
+            var secret = "MT" + "Ey" + "Mg=="; // 隠蔽されたパスワード
+            if (input === atob(secret)) { 
+                sites = sites.filter(s => s.id !== id);
+                localStorage.setItem('site_data_shared', JSON.stringify(sites));
+                render();
+            } else if (input !== null) {
+                alert("パスワードが正しくありません");
+            }
+        }
+
+        function toggleSection(id) {
+            var el = document.getElementById(id);
+            if(el) el.classList.toggle('hidden');
+        }
+
+        function render() {
+            var container = document.getElementById('display-root');
+            container.innerHTML = '';
+            var clients = [...new Set(sites.map(s => s.client))];
+
+            clients.forEach(clientName => {
+                var clientSection = document.createElement('div');
+                clientSection.className = "mb-4 border border-gray-300 rounded-lg overflow-hidden shadow-sm bg-white";
+                var safeClientId = "c-" + btoa(encodeURIComponent(clientName)).replace(/=/g,'');
+                clientSection.innerHTML = `<div onclick="toggleSection('${safeClientId}')" class="bg-slate-700 text-white p-4 font-bold flex justify-between items-center cursor-pointer"><span>🏢 ${clientName}</span><span>▼</span></div><div id="${safeClientId}" class="hidden bg-gray-50 p-2 space-y-2"></div>`;
+                var clientInner = clientSection.querySelector('#' + safeClientId);
+
+                var siteGroups = {};
+                sites.filter(s => s.client === clientName).forEach(s => {
+                    var groupKey = s.office + s.siteName + (s.subject||'') + (s.code||'');
+                    if (!siteGroups[groupKey]) siteGroups[groupKey] = [];
+                    siteGroups[groupKey].push(s);
+                });
+
+                Object.keys(siteGroups).forEach(key => {
+                    var group = siteGroups[key];
+                    var first = group[0];
+                    var groupBox = document.createElement('div');
+                    groupBox.className = "bg-white border rounded shadow-sm overflow-hidden mb-2";
+                    var detailId = "group-" + first.id;
+                    groupBox.innerHTML = `<div onclick="toggleSection('${detailId}')" class="p-3 font-bold text-gray-700 flex justify-between cursor-pointer hover:bg-blue-50"><span>🚧 ${first.office} / ${first.siteName}</span><span class="text-blue-500 text-xs">${group.length > 1 ? group.length + '件' : '詳細'}</span></div><div id="${detailId}" class="hidden p-2 border-t space-y-3"></div>`;
+                    var detailArea = groupBox.querySelector('#' + detailId);
+                    
+                    group.forEach(s => {
+                        var shiftClass = s.shift === '日勤' ? 'border-day bg-day-light' : 'border-night bg-night-light';
+                        var shiftTextClass = s.shift === '日勤' ? 'text-orange-600' : 'text-blue-700';
+                        var itemDiv = document.createElement('div');
+                        itemDiv.className = `p-4 border-2 rounded-lg mb-2 ${shiftClass}`;
+                        itemDiv.innerHTML = `
+                            <div class="flex justify-between font-black text-lg ${shiftTextClass} mb-2">
+                                <span>${s.shift} 【${s.jobType}】</span>
+                                <span class="text-sm bg-white px-2 py-1 rounded border">コード: ${s.code}</span>
+                            </div>
+                            <div class="space-y-2 text-sm text-gray-800">
+                                <p><strong>件名:</strong> ${s.subject}</p>
+                                <div class="p-3 bg-white border border-blue-400 rounded-lg text-blue-700 font-bold relative">
+                                    <div onclick="openMap('${s.location}')">📍 現場場所:<br><span class="text-xs underline font-normal break-all">${s.location}</span></div>
+                                    <button onclick="pasteMapUrl('edit-loc-${s.id}')" class="mt-2 w-full bg-blue-100 text-blue-800 text-[10px] py-1 rounded border border-blue-300">共有URLで上書き</button>
+                                    <input type="hidden" id="edit-loc-${s.id}">
+                                </div>
+                                <div class="p-2 bg-white rounded border border-gray-300">
+                                    <strong>作業内容:</strong>
+                                    <textarea onchange="editField(${s.id}, 'desc', this.value)" class="w-full mt-1 p-2 bg-yellow-50 rounded border-none h-20 text-sm">${s.desc}</textarea>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 mt-2">
+                                    <div class="p-2 bg-white rounded border">
+                                        <strong>点呼時間:</strong>
+                                        <textarea onchange="editField(${s.id}, 'time', this.value)" inputmode="numeric" class="w-full mt-1 p-1 bg-red-50 text-red-600 font-bold border-none text-xs" rows="3">${s.time}</textarea>
+                                    </div>
+                                    <div class="p-2 bg-slate-600 text-white rounded shadow relative">
+                                        <span class="text-xs">🏁 点呼場所:</span>
+                                        <textarea id="val-meet-${s.id}" onchange="editField(${s.id}, 'meetingLoc', this.value)" class="w-full mt-1 p-1 bg-slate-500 text-white border-none text-[10px] leading-tight" rows="3">${s.meetingLoc}</textarea>
+                                        <button onclick="pasteMapUrl('edit-meet-${s.id}')" class="w-full bg-slate-700 text-[9px] py-1 mt-1 rounded">共有URLで上書き</button>
+                                        <input type="hidden" id="edit-meet-${s.id}">
+                                        <div onclick="openMap('${s.meetingLoc ? s.meetingLoc.split('\\n')[0] : ''}')" class="text-center mt-1 underline text-[10px] cursor-pointer">地図を表示</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onclick="deleteSite(${s.id})" class="w-full mt-4 py-2 text-red-400 border border-red-200 rounded text-xs">消去</button>
+                        `;
+                        detailArea.appendChild(itemDiv);
+                    });
+                    clientInner.appendChild(groupBox);
+                });
+                container.appendChild(clientSection);
+            });
+        }
+        render();
+    </script>
+</body>
+</html>
