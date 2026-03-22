@@ -43,7 +43,7 @@
     </div>
 
     <header class="bg-slate-800 text-white p-4 shadow-lg sticky top-0 z-50 flex justify-between items-center">
-        <div class="w-10"></div>
+        <a href="https://fumikiri.info/#toc5" target="_blank" class="text-[10px] bg-blue-700 px-2 py-1 rounded text-center leading-tight">踏切<br>地図</a>
         <h1 class="font-bold">現場詳細管理アプリ</h1>
         <button onclick="checkAdminPassword()" class="text-[10px] bg-slate-700 px-2 py-1 rounded">設定</button>
     </header>
@@ -284,7 +284,6 @@
             document.getElementById('loading').style.display = 'none';
         }
 
-        // メイン画面の消去ボタン（パスワード必要）
         async function deleteSite(id) { 
             if (prompt("消去用パスワードを入力してください") === "1122") {
                 await db.collection("sites").doc(id).delete(); 
@@ -293,7 +292,6 @@
             }
         }
 
-        // 設定画面内の消去（パスワード不要）
         async function quickDelete(id) {
             if (confirm("この現場データを削除しますか？")) {
                 await db.collection("sites").doc(id).delete();
