@@ -146,7 +146,7 @@
         let sites = [];
         let masterItems = [];
 
-        db.collection("sites").orderBy("createdAt", "desc").onSnapshot(s => { sites = s.docs.map(d => ({firebaseId:d.id, ...d.data()})); render(); renderCreationHistory(); });
+        db.collection("sites").onSnapshot(s => { sites = s.docs.map(d => ({firebaseId:d.id, ...d.data()})); render(); renderCreationHistory(); });
         db.collection("master").onSnapshot(s => { 
             masterItems = s.docs.map(d => ({id:d.id, ...d.data()}));
             renderGrids();
